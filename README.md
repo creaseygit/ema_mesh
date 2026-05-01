@@ -4,6 +4,8 @@ Interactive Three.js visualization that transforms BTC price data into a 3D mesh
 
 ![3D EMA Mesh](https://img.shields.io/badge/Three.js-3D-blue)
 
+![Screenshot](screenshot.jpg)
+
 ## What it does
 
 Takes 1-minute BTC/USD candle data and computes EMAs across a configurable range of periods (e.g. 5 to 1000). Each EMA becomes a row in a 3D grid — time on X, price on Y, EMA period on Z — and the rows are connected into a continuous mesh surface.
