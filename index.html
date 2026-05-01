@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>3D EMA Mesh — BTC</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0f; overflow: hidden; font-family: monospace; color: #ccc; display: flex; }
+  #view2d { width: 50%; height: 100vh; position: relative; border-right: 1px solid #222; }
+  #view3d { width: 50%; height: 100vh; position: relative; }
+  #chart { width: 100%; height: 100%; background: #0a0a0f; }
+  #view3d canvas { display: block; }
+  #tooltip {
+    position: absolute; display: none;
+    background: rgba(0,0,0,0.85); padding: 8px 12px; border-radius: 4px;
+    font-size: 12px; pointer-events: none; border: 1px solid #444; z-index: 10;
+  }
+  #panel {
+    position: absolute; top: 12px; right: 12px; width: 240px;
+    background: rgba(0,0,0,0.8); padding: 14px; border-radius: 8px;
+    font-size: 12px; line-height: 1.8; user-select: none;
+    max-height: calc(100vh - 24px); overflow-y: auto; z-index: 10;
+  }
+  #panel h2 { color: #fff; font-size: 14px; margin-bottom: 8px; }
+  #panel label { display: flex; justify-content: space-between; align-items: center; }
+  #panel input[type=range] { width: 120px; accent-color: #4488ff; }
+  #panel .val { color: #7af; min-width: 40px; text-align: right; }
+  #panel .section { border-top: 1px solid #333; margin-top: 8px; padding-top: 8px; }
+  #panel .section-title { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  #panel button {
+    width: 100%; margin-top: 10px; padding: 7px; border: 1px solid #4488ff;
+    background: rgba(68,136,255,0.15); color: #7af; border-radius: 4px;
+    cursor: pointer; font-family: monospace; font-size: 12px;
+  }
+  #panel button:hover { background: rgba(68,136,255,0.3); }
+  #chart-label {
+    position: absolute; top: 8px; left: 12px;
+    font-size: 13px; color: #888; pointer-events: none;
+  }
+  #chart-tooltip {
+    position: absolute; display: none;
+    background: rgba(0,0,0,0.85); padding: 6px 10px; border-radius: 4px;
+    font-size: 11px; pointer-events: none; border: 1px solid #444; z-index: 10;
+  }
+</style>
+</head>
+<body>
+
+<div id="view2d">
+  <canvas id="chart"></canvas>
+  <div id="chart-label">BTC/USD — 1min</div>
+  <div id="chart-tooltip"></div>
+</div>
+
+<div id="view3d">
+  <div id="panel">
+    <h2>3D EMA Mesh</h2>
+
+    <div class="section-title">EMA Range</div>
+    <label>Min <input type="range" id="emaMin" min="2" max="200" value="5"> <span class="val" id="emaMinVal">5</span></label>
+    <label>Max <input type="range" id="emaMax" min="50" max="10000" value="1000" step="10"> <span class="val" id="emaMaxVal">1000</span></label>
+    <label>Step <input type="range" id="emaStep" min="1" max="50" value="10"> <span class="val" id="emaStepVal">10</span></label>
+    <div id="emaCount" style="color:#666; font-size:11px; text-align:right;"></div>
+
+    <div class="section">
+      <div class="section-title">Scale</div>
+      <label>X (time) <input type="range" id="scaleX" min="20" max="400" value="100"> <span class="val" id="scaleXVal">100</span></label>
+      <label>Y (price) <input type="range" id="scaleY" min="10" max="200" value="60"> <span class="val" id="scaleYVal">60</span></label>
+      <label>Z (depth) <input type="range" id="scaleZ" min="10" max="300" value="40"> <span class="val" id="scaleZVal">40</span></label>
+      <label>Z curve <input type="range" id="zCurve" min="10" max="100" value="100"> <span class="val" id="zCurveVal">1.00</span></label>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Projection</div>
+      <label>Max minutes <input type="range" id="projMinutes" min="0" max="120" value="60"> <span class="val" id="projMinutesVal">60</span></label>
+      <label>Regression window <input type="range" id="projWindow" min="10" max="500" value="120"> <span class="val" id="projWindowVal">120</span></label>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Contour</div>
+      <label>Position <input type="range" id="contourPos" min="0" max="1000" value="0"> <span class="val" id="contourPosVal">off</span></label>
+      <label><input type="checkbox" id="contourEnabled" style="margin-right:6px;accent-color:#ff0;"> Enable contour line</label>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Color</div>
+      <label>Mode
+        <select id="colorMode" style="background:#1a1a2a;color:#ccc;border:1px solid #444;border-radius:3px;padding:2px 4px;font-family:monospace;font-size:12px;">
+          <option value="price">Price Level</option>
+          <option value="macd" selected>MACD Slope</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Material</div>
+      <label>Opacity <input type="range" id="opacity" min="10" max="100" value="88"> <span class="val" id="opacityVal">0.88</span></label>
+      <label>Shininess <input type="range" id="shininess" min="0" max="200" value="60"> <span class="val" id="shininessVal">60</span></label>
+    </div>
+
+    <button id="rebuild">Rebuild Mesh</button>
+  </div>
+  <div id="tooltip"></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+function computeEMA(closes, period) {
+  const k = 2 / (period + 1);
+  const ema = new Float64Array(closes.length);
+  ema[0] = closes[0];
+  for (let i = 1; i < closes.length; i++) {
+    ema[i] = closes[i] * k + ema[i - 1] * (1 - k);
+  }
+  return ema;
+}
+
+function getParams() {
+  return {
+    emaMin:  +document.getElementById('emaMin').value,
+    emaMax:  +document.getElementById('emaMax').value,
+    emaStep: +document.getElementById('emaStep').value,
+    scaleX:  +document.getElementById('scaleX').value,
+    scaleY:  +document.getElementById('scaleY').value,
+    scaleZ:  +document.getElementById('scaleZ').value,
+    zCurve:  +document.getElementById('zCurve').value / 100,
+    opacity: +document.getElementById('opacity').value / 100,
+    shininess: +document.getElementById('shininess').value,
+    colorMode: document.getElementById('colorMode').value,
+    projMinutes: +document.getElementById('projMinutes').value,
+    projWindow: +document.getElementById('projWindow').value,
+  };
+}
+
+function updateLabels() {
+  const p = getParams();
+  document.getElementById('emaMinVal').textContent = p.emaMin;
+  document.getElementById('emaMaxVal').textContent = p.emaMax;
+  document.getElementById('emaStepVal').textContent = p.emaStep;
+  document.getElementById('scaleXVal').textContent = p.scaleX;
+  document.getElementById('scaleYVal').textContent = p.scaleY;
+  document.getElementById('scaleZVal').textContent = p.scaleZ;
+  document.getElementById('zCurveVal').textContent = p.zCurve.toFixed(2);
+  document.getElementById('opacityVal').textContent = p.opacity.toFixed(2);
+  document.getElementById('shininessVal').textContent = p.shininess;
+  document.getElementById('projMinutesVal').textContent = p.projMinutes;
+  document.getElementById('projWindowVal').textContent = p.projWindow;
+
+  const periods = [];
+  for (let v = p.emaMin; v <= p.emaMax; v += p.emaStep) periods.push(v);
+  document.getElementById('emaCount').textContent = periods.length + ' levels';
+}
+
+// ══════════════════════════════════════
+//  Shared state
+// ══════════════════════════════════════
+let rawData = null;
+let closes = null;
+let timestamps = null;
+let currentEMAs = null;
+let currentPeriods = null;
+let projectedContour = null; // { prices: Float64Array, minutes: number }
+
+// ══════════════════════════════════════
+//  2D Chart
+// ══════════════════════════════════════
+const chartCanvas = document.getElementById('chart');
+const ctx2d = chartCanvas.getContext('2d');
+const chartTooltip = document.getElementById('chart-tooltip');
+
+// Viewport state: normalized 0-1 range into the data
+const view = { x0: 0, x1: 1, y0: 0, y1: 1, dragging: false, dragStartX: 0, dragStartY: 0, vx0: 0, vy0: 0 };
+
+function resetView() {
+  view.x0 = 0; view.x1 = 1; view.y0 = 0; view.y1 = 1;
+}
+
+function resizeChart() {
+  const rect = document.getElementById('view2d').getBoundingClientRect();
+  chartCanvas.width = rect.width * devicePixelRatio;
+  chartCanvas.height = rect.height * devicePixelRatio;
+  chartCanvas.style.width = rect.width + 'px';
+  chartCanvas.style.height = rect.height + 'px';
+  ctx2d.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+}
+
+function getVisiblePriceRange() {
+  if (!closes || !currentEMAs) return { minP: 0, maxP: 1 };
+  const tiStart = Math.max(0, Math.floor(view.x0 * (closes.length - 1)));
+  const tiEnd = Math.min(closes.length - 1, Math.ceil(view.x1 * (closes.length - 1)));
+  let minP = Infinity, maxP = -Infinity;
+  for (let i = tiStart; i <= tiEnd; i++) {
+    if (closes[i] < minP) minP = closes[i];
+    if (closes[i] > maxP) maxP = closes[i];
+  }
+  for (const ema of currentEMAs) {
+    for (let i = tiStart; i <= tiEnd; i++) {
+      if (ema[i] < minP) minP = ema[i];
+      if (ema[i] > maxP) maxP = ema[i];
+    }
+  }
+  const pRange = maxP - minP || 1;
+  const pPad = pRange * 0.05;
+  return { minP: minP - pPad, maxP: maxP + pPad };
+}
+
+function drawChart() {
+  if (!closes || !currentEMAs) return;
+
+  const rect = document.getElementById('view2d').getBoundingClientRect();
+  const W = rect.width;
+  const H = rect.height;
+  const pad = { top: 30, right: 60, bottom: 30, left: 12 };
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top - pad.bottom;
+
+  ctx2d.clearRect(0, 0, W, H);
+
+  // Auto-fit price axis to visible time range
+  const { minP, maxP } = getVisiblePriceRange();
+  const totalPRange = maxP - minP;
+
+  // Map data index to pixel using viewport
+  function tx(ti) {
+    const frac = ti / (closes.length - 1);
+    return pad.left + ((frac - view.x0) / (view.x1 - view.x0)) * cw;
+  }
+  function ty(price) {
+    return pad.top + (1 - (price - minP) / totalPRange) * ch;
+  }
+
+  // Clip to chart area
+  ctx2d.save();
+  ctx2d.beginPath();
+  ctx2d.rect(pad.left, pad.top, cw, ch);
+  ctx2d.clip();
+
+  // Grid lines
+  ctx2d.strokeStyle = '#1a1a2a';
+  ctx2d.lineWidth = 1;
+  const nGrid = 8;
+  for (let i = 0; i <= nGrid; i++) {
+    const price = minP + (i / nGrid) * totalPRange;
+    const y = ty(price);
+    ctx2d.beginPath(); ctx2d.moveTo(pad.left, y); ctx2d.lineTo(W - pad.right, y); ctx2d.stroke();
+  }
+
+  // Time grid
+  const visTiStart = Math.max(0, Math.floor(view.x0 * (closes.length - 1)));
+  const visTiEnd = Math.min(closes.length - 1, Math.ceil(view.x1 * (closes.length - 1)));
+  const visRange = visTiEnd - visTiStart;
+  const nTime = 6;
+  for (let i = 0; i <= nTime; i++) {
+    const ti = visTiStart + Math.floor((i / nTime) * visRange);
+    const x = tx(ti);
+    ctx2d.beginPath(); ctx2d.moveTo(x, pad.top); ctx2d.lineTo(x, H - pad.bottom); ctx2d.stroke();
+  }
+
+  // Determine step for drawing (skip points when zoomed out)
+  const pixelsPerPoint = cw / visRange;
+  const drawStep = Math.max(1, Math.floor(1 / pixelsPerPoint));
+
+  // EMA ribbon
+  for (let ei = 0; ei < currentEMAs.length; ei++) {
+    const frac = ei / (currentEMAs.length - 1);
+    const alpha = 0.08 + 0.12 * (1 - frac);
+    const hue = Math.floor(200 + frac * 60);
+    ctx2d.strokeStyle = `hsla(${hue}, 60%, 55%, ${alpha})`;
+    ctx2d.lineWidth = 0.8;
+    ctx2d.beginPath();
+    let first = true;
+    for (let ti = visTiStart; ti <= visTiEnd; ti += drawStep) {
+      const x = tx(ti), y = ty(currentEMAs[ei][ti]);
+      first ? (ctx2d.moveTo(x, y), first = false) : ctx2d.lineTo(x, y);
+    }
+    ctx2d.stroke();
+  }
+
+  // Contour EMA line
+  const contourEnabled = document.getElementById('contourEnabled').checked;
+  if (contourEnabled && currentPeriods) {
+    const frac = +document.getElementById('contourPos').value / 1000;
+    const emaF = frac * (currentEMAs.length - 1);
+    const eiLow = Math.min(Math.floor(emaF), currentEMAs.length - 2);
+    const eiHigh = eiLow + 1;
+    const t = emaF - eiLow;
+
+    ctx2d.strokeStyle = '#ffff00';
+    ctx2d.lineWidth = 2;
+    ctx2d.beginPath();
+    let first = true;
+    for (let ti = visTiStart; ti <= visTiEnd; ti += drawStep) {
+      const val = currentEMAs[eiLow][ti] + t * (currentEMAs[eiHigh][ti] - currentEMAs[eiLow][ti]);
+      const x = tx(ti), y = ty(val);
+      first ? (ctx2d.moveTo(x, y), first = false) : ctx2d.lineTo(x, y);
+    }
+    ctx2d.stroke();
+
+    if (projectedContour && projectedContour.prices.length > 0) {
+      const projPrices = projectedContour.prices;
+      const projMin = projectedContour.minutes;
+      const lastX = tx(closes.length - 1);
+      const projWidthData = projMin / (closes.length - 1);
+      const projWidthPx = (projWidthData / (view.x1 - view.x0)) * cw;
+
+      ctx2d.strokeStyle = 'rgba(255,255,0,0.4)';
+      ctx2d.lineWidth = 2;
+      ctx2d.setLineDash([4, 4]);
+      ctx2d.beginPath();
+      const startVal = currentEMAs[eiLow][closes.length - 1] + t * (currentEMAs[eiHigh][closes.length - 1] - currentEMAs[eiLow][closes.length - 1]);
+      ctx2d.moveTo(lastX, ty(startVal));
+      for (let s = 0; s < projPrices.length; s++) {
+        const px = lastX + ((s + 1) / projPrices.length) * projWidthPx;
+        ctx2d.lineTo(px, ty(projPrices[s]));
+      }
+      ctx2d.stroke();
+      ctx2d.setLineDash([]);
+    }
+  }
+
+  // Price line
+  ctx2d.strokeStyle = '#ffffff';
+  ctx2d.lineWidth = 1.2;
+  ctx2d.beginPath();
+  let first = true;
+  for (let ti = visTiStart; ti <= visTiEnd; ti += drawStep) {
+    const x = tx(ti), y = ty(closes[ti]);
+    first ? (ctx2d.moveTo(x, y), first = false) : ctx2d.lineTo(x, y);
+  }
+  ctx2d.stroke();
+
+  // Candlesticks
+  const candleStep = Math.max(1, drawStep);
+  if (pixelsPerPoint > 0.5) {
+    for (let ti = visTiStart; ti <= visTiEnd; ti += candleStep) {
+      const d = rawData[ti];
+      const x = tx(ti);
+      const bull = d.c >= d.o;
+      ctx2d.strokeStyle = bull ? '#22cc66' : '#ee4444';
+      ctx2d.lineWidth = Math.min(2, pixelsPerPoint * 0.4);
+      ctx2d.beginPath();
+      ctx2d.moveTo(x, ty(d.l));
+      ctx2d.lineTo(x, ty(d.h));
+      ctx2d.stroke();
+    }
+  }
+
+  ctx2d.restore();
+
+  // Price labels (outside clip)
+  ctx2d.fillStyle = '#555';
+  ctx2d.font = '10px monospace';
+  ctx2d.textAlign = 'left';
+  for (let i = 0; i <= nGrid; i++) {
+    const price = minP + (i / nGrid) * totalPRange;
+    const y = ty(price);
+    if (y >= pad.top && y <= H - pad.bottom)
+      ctx2d.fillText('$' + price.toFixed(0), W - pad.right + 4, y + 3);
+  }
+
+  // Time labels
+  ctx2d.textAlign = 'center';
+  for (let i = 0; i <= nTime; i++) {
+    const ti = visTiStart + Math.floor((i / nTime) * visRange);
+    const x = tx(ti);
+    if (ti >= 0 && ti < timestamps.length) {
+      const d = new Date(timestamps[ti]);
+      const label = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+      ctx2d.fillText(label, x, H - pad.bottom + 14);
+    }
+  }
+}
+
+// Zoom (scroll wheel)
+chartCanvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (!closes) return;
+
+  const rect = chartCanvas.getBoundingClientRect();
+  const pad = { left: 12, right: 60, top: 30, bottom: 30 };
+  const cw = rect.width - pad.left - pad.right;
+
+  const mx = e.clientX - rect.left;
+  const fracX = Math.max(0, Math.min(1, (mx - pad.left) / cw));
+  const dataX = view.x0 + fracX * (view.x1 - view.x0);
+
+  const zoomFactor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+  const rangeX = (view.x1 - view.x0) * zoomFactor;
+
+  const newRange = Math.min(1, Math.max(0.005, rangeX));
+  view.x0 = Math.max(0, dataX - fracX * newRange);
+  view.x1 = Math.min(1.2, view.x0 + newRange);
+  if (view.x0 < 0) { view.x1 -= view.x0; view.x0 = 0; }
+
+  drawChart();
+}, { passive: false });
+
+// Pan (mouse drag)
+chartCanvas.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  view.dragging = true;
+  view.dragStartX = e.clientX;
+  view.dragStartY = e.clientY;
+  view.vx0 = view.x0;
+  view.vy0 = view.y0;
+  chartCanvas.style.cursor = 'grabbing';
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!view.dragging || !closes) return;
+  const rect = chartCanvas.getBoundingClientRect();
+  const pad = { left: 12, right: 60 };
+  const cw = rect.width - pad.left - pad.right;
+
+  const dxPx = e.clientX - view.dragStartX;
+  const dxData = -(dxPx / cw) * (view.x1 - view.x0);
+
+  const range = view.x1 - view.x0;
+  let newX0 = view.vx0 + dxData;
+  if (newX0 < 0) newX0 = 0;
+  if (newX0 + range > 1.2) newX0 = 1.2 - range;
+  view.x0 = newX0;
+  view.x1 = newX0 + range;
+
+  drawChart();
+});
+
+window.addEventListener('mouseup', () => {
+  if (view.dragging) {
+    view.dragging = false;
+    chartCanvas.style.cursor = '';
+  }
+});
+
+// Double-click to reset
+chartCanvas.addEventListener('dblclick', () => {
+  resetView();
+  drawChart();
+});
+
+// Tooltip
+chartCanvas.addEventListener('mousemove', (e) => {
+  if (view.dragging || !closes || !currentEMAs) return;
+  const rect = chartCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const pad = { left: 12, right: 60 };
+  const cw = rect.width - pad.left - pad.right;
+  const fracX = (mx - pad.left) / cw;
+  const dataFrac = view.x0 + fracX * (view.x1 - view.x0);
+  const ti = Math.max(0, Math.min(closes.length - 1, Math.round(dataFrac * (closes.length - 1))));
+  const d = new Date(timestamps[ti]);
+  const price = closes[ti].toFixed(2);
+  let html = `<div>${d.toLocaleString()}</div><div>Close: $${price}</div>`;
+
+  if (document.getElementById('contourEnabled').checked && currentPeriods) {
+    const cf = +document.getElementById('contourPos').value / 1000;
+    const emaF = cf * (currentEMAs.length - 1);
+    const eiL = Math.min(Math.floor(emaF), currentEMAs.length - 2);
+    const t = emaF - eiL;
+    const val = currentEMAs[eiL][ti] + t * (currentEMAs[eiL + 1][ti] - currentEMAs[eiL][ti]);
+    const period = currentPeriods[eiL] + t * (currentPeriods[eiL + 1] - currentPeriods[eiL]);
+    html += `<div style="color:#ff0">EMA ${Math.round(period)}: $${val.toFixed(2)}</div>`;
+  }
+
+  chartTooltip.style.display = 'block';
+  chartTooltip.style.left = (e.clientX - rect.left + 14) + 'px';
+  chartTooltip.style.top = (e.clientY - rect.top + 14) + 'px';
+  chartTooltip.innerHTML = html;
+});
+chartCanvas.addEventListener('mouseleave', () => { chartTooltip.style.display = 'none'; });
+
+// ══════════════════════════════════════
+//  3D Scene
+// ══════════════════════════════════════
+async function main() {
+  const raw = await fetch('btc_data.json').then(r => r.json());
+  rawData = raw;
+  closes = raw.map(d => d.c);
+  timestamps = raw.map(d => d.t);
+  const numPoints = closes.length;
+
+  const container3d = document.getElementById('view3d');
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a0f);
+  scene.fog = new THREE.FogExp2(0x0a0a0f, 0.002);
+
+  scene.add(new THREE.AmbientLight(0x334455, 1.2));
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+  dirLight.position.set(30, 50, 20);
+  scene.add(dirLight);
+  const dirLight2 = new THREE.DirectionalLight(0x4488ff, 0.5);
+  dirLight2.position.set(-20, -30, -10);
+  scene.add(dirLight2);
+
+  const camera = new THREE.PerspectiveCamera(55, container3d.clientWidth / container3d.clientHeight, 0.1, 1000);
+  camera.position.set(0, 30, 80);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(container3d.clientWidth, container3d.clientHeight);
+  renderer.setPixelRatio(devicePixelRatio);
+  container3d.appendChild(renderer.domElement);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+
+  const tooltip = document.getElementById('tooltip');
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+
+  let meshObj = null, priceLineObj = null, projMeshObj = null, projWireObj = null, contourLineObj = null;
+  let gridData = null;
+
+  function disposeObj(obj) {
+    if (!obj) return;
+    scene.remove(obj);
+    obj.geometry.dispose();
+    if (obj.material) obj.material.dispose();
+  }
+
+  function buildMesh() {
+    const p = getParams();
+    disposeObj(meshObj); meshObj = null;
+    disposeObj(priceLineObj); priceLineObj = null;
+    disposeObj(projMeshObj); projMeshObj = null;
+    disposeObj(projWireObj); projWireObj = null;
+
+    const periods = [];
+    for (let v = p.emaMin; v <= p.emaMax; v += p.emaStep) periods.push(v);
+    const numEMAs = periods.length;
+    if (numEMAs < 2) return;
+
+    const emas = periods.map(per => computeEMA(closes, per));
+    currentEMAs = emas;
+    currentPeriods = periods;
+
+    let minPrice = Infinity, maxPrice = -Infinity;
+    for (const arr of [...emas, closes]) {
+      for (let i = 0; i < arr.length; i++) {
+        if (arr[i] < minPrice) minPrice = arr[i];
+        if (arr[i] > maxPrice) maxPrice = arr[i];
+      }
+    }
+    const priceRange = maxPrice - minPrice || 1;
+
+    let slopeGrid = null, maxAbsSlope = 0;
+    if (p.colorMode === 'macd') {
+      slopeGrid = new Array(numEMAs);
+      for (let ei = 0; ei < numEMAs; ei++) {
+        slopeGrid[ei] = new Float64Array(numPoints);
+        const nextEi = ei < numEMAs - 1 ? ei + 1 : ei - 1;
+        for (let ti = 0; ti < numPoints; ti++) slopeGrid[ei][ti] = emas[ei][ti] - emas[nextEi][ti];
+      }
+      for (let ei = 0; ei < numEMAs; ei++)
+        for (let ti = 0; ti < numPoints; ti++) {
+          const abs = Math.abs(slopeGrid[ei][ti]);
+          if (abs > maxAbsSlope) maxAbsSlope = abs;
+        }
+      if (maxAbsSlope === 0) maxAbsSlope = 1;
+    }
+
+    const vertices = new Float32Array(numPoints * numEMAs * 3);
+    const colors = new Float32Array(numPoints * numEMAs * 3);
+    const color = new THREE.Color();
+
+    for (let ei = 0; ei < numEMAs; ei++) {
+      for (let ti = 0; ti < numPoints; ti++) {
+        const idx = (ei * numPoints + ti) * 3;
+        vertices[idx]     = (ti / (numPoints - 1)) * p.scaleX - p.scaleX / 2;
+        vertices[idx + 1] = ((emas[ei][ti] - minPrice) / priceRange) * p.scaleY - p.scaleY / 2;
+        const zFrac = Math.pow(ei / (numEMAs - 1), p.zCurve);
+        vertices[idx + 2] = zFrac * p.scaleZ - p.scaleZ / 2;
+
+        if (p.colorMode === 'macd') {
+          const slope = slopeGrid[ei][ti] / maxAbsSlope;
+          if (slope > 0) color.setHSL(0.08 - slope * 0.06, 0.85, 0.4 + slope * 0.15);
+          else color.setHSL(0.55 + slope * -0.12, 0.8, 0.4 + Math.abs(slope) * 0.15);
+        } else {
+          const norm = (emas[ei][ti] - minPrice) / priceRange;
+          color.setHSL(norm * 0.35, 0.9, 0.45 + norm * 0.15);
+        }
+        colors[idx] = color.r; colors[idx+1] = color.g; colors[idx+2] = color.b;
+      }
+    }
+
+    const indices = [];
+    for (let ei = 0; ei < numEMAs - 1; ei++)
+      for (let ti = 0; ti < numPoints - 1; ti++) {
+        const a = ei * numPoints + ti, b = a+1, c = (ei+1)*numPoints+ti, d = c+1;
+        indices.push(a,b,c); indices.push(b,d,c);
+      }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+
+    meshObj = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({
+      vertexColors: true, side: THREE.DoubleSide,
+      shininess: p.shininess, transparent: true, opacity: p.opacity,
+    }));
+    scene.add(meshObj);
+
+    // Projection
+    if (p.projMinutes > 0) {
+      const normalAttr = geometry.getAttribute('normal');
+      const posAttr = geometry.getAttribute('position');
+      const projSteps = 30;
+      const xPerMinute = p.scaleX / (numPoints - 1);
+      const regWindow = Math.min(p.projWindow, numPoints);
+      const projGrid = [];
+
+      for (let ei = 0; ei < numEMAs; ei++) {
+        const pm = p.projMinutes * (ei / (numEMAs - 1));
+        const startTi = Math.max(0, numPoints - regWindow);
+        const slopes = [];
+        for (let ti = startTi; ti < numPoints; ti++) {
+          const vIdx = ei * numPoints + ti;
+          const nx = normalAttr.getX(vIdx), ny = normalAttr.getY(vIdx);
+          if (Math.abs(ny) > 1e-8) slopes.push(-nx / ny);
+        }
+        const n = slopes.length;
+        let sT=0, sS=0, sTS=0, sTT=0;
+        for (let i = 0; i < n; i++) { sT+=i; sS+=slopes[i]; sTS+=i*slopes[i]; sTT+=i*i; }
+        const b = n > 1 ? (n*sTS - sT*sS) / (n*sTT - sT*sT) : 0;
+        const a = n > 0 ? (sS - b*sT) / n : 0;
+        const curSlope = a + b*(n-1);
+        const slopeAccel = b / xPerMinute;
+
+        const li = ei*numPoints + (numPoints-1);
+        const lx = posAttr.getX(li), ly = posAttr.getY(li), lz = posAttr.getZ(li);
+
+        const pts = [];
+        for (let s = 0; s <= projSteps; s++) {
+          const dx = pm * (s/projSteps) * xPerMinute;
+          const dy = curSlope * dx + 0.5 * slopeAccel * dx * dx;
+          pts.push(lx+dx, ly+dy, lz);
+        }
+        projGrid.push(pts);
+      }
+
+      const pSteps1 = projSteps + 1;
+      const projVerts = new Float32Array(numEMAs * pSteps1 * 3);
+      const projColors = new Float32Array(numEMAs * pSteps1 * 3);
+
+      let pmY=Infinity, pxY=-Infinity;
+      for (let ei=0; ei<numEMAs; ei++) for (let s=0; s<pSteps1; s++) {
+        const y=projGrid[ei][s*3+1]; if(y<pmY)pmY=y; if(y>pxY)pxY=y;
+      }
+      const pYR = pxY-pmY||1;
+
+      for (let ei=0; ei<numEMAs; ei++) for (let s=0; s<pSteps1; s++) {
+        const idx = (ei*pSteps1+s)*3;
+        projVerts[idx]=projGrid[ei][s*3]; projVerts[idx+1]=projGrid[ei][s*3+1]; projVerts[idx+2]=projGrid[ei][s*3+2];
+        const fade = s/projSteps;
+        const yN = (projGrid[ei][s*3+1]-pmY)/pYR;
+        color.setHSL(0.58+yN*0.1, 0.4-fade*0.2, 0.35+yN*0.15);
+        projColors[idx]=color.r; projColors[idx+1]=color.g; projColors[idx+2]=color.b;
+      }
+
+      const projIndices = [];
+      for (let ei=0; ei<numEMAs-1; ei++) for (let s=0; s<projSteps; s++) {
+        const a=ei*pSteps1+s, b=a+1, c=(ei+1)*pSteps1+s, d=c+1;
+        projIndices.push(a,b,c); projIndices.push(b,d,c);
+      }
+
+      const projGeom = new THREE.BufferGeometry();
+      projGeom.setAttribute('position', new THREE.BufferAttribute(projVerts, 3));
+      projGeom.setAttribute('color', new THREE.BufferAttribute(projColors, 3));
+      projGeom.setIndex(projIndices);
+      projGeom.computeVertexNormals();
+
+      projMeshObj = new THREE.Mesh(projGeom, new THREE.MeshPhongMaterial({
+        vertexColors: true, side: THREE.DoubleSide, shininess: 30, transparent: true, opacity: p.opacity * 0.5,
+      }));
+      scene.add(projMeshObj);
+      projWireObj = new THREE.Mesh(projGeom, new THREE.MeshBasicMaterial({
+        vertexColors: true, wireframe: true, transparent: true, opacity: 0.15,
+      }));
+      scene.add(projWireObj);
+
+      gridData = { mainVerts: vertices, projVerts, numEMAs, numPoints, projSteps, priceRange, minPrice };
+    } else {
+      gridData = { mainVerts: vertices, projVerts: null, numEMAs, numPoints, projSteps: 0, priceRange, minPrice };
+    }
+
+    // Price line
+    const priceGeom = new THREE.BufferGeometry();
+    const pv = new Float32Array(numPoints * 3);
+    for (let ti = 0; ti < numPoints; ti++) {
+      pv[ti*3] = (ti/(numPoints-1))*p.scaleX - p.scaleX/2;
+      pv[ti*3+1] = ((closes[ti]-minPrice)/priceRange)*p.scaleY - p.scaleY/2;
+      pv[ti*3+2] = -p.scaleZ/2 - 2;
+    }
+    priceGeom.setAttribute('position', new THREE.BufferAttribute(pv, 3));
+    priceLineObj = new THREE.Line(priceGeom, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 }));
+    scene.add(priceLineObj);
+
+    updateContour();
+    drawChart();
+  }
+
+  function updateContour() {
+    disposeObj(contourLineObj); contourLineObj = null;
+    projectedContour = null;
+
+    if (!gridData || !document.getElementById('contourEnabled').checked) { drawChart(); return; }
+
+    const { mainVerts, projVerts, numEMAs, numPoints, projSteps, priceRange, minPrice } = gridData;
+    const frac = +document.getElementById('contourPos').value / 1000;
+    const emaF = frac * (numEMAs - 1);
+    const eiLow = Math.min(Math.floor(emaF), numEMAs - 2);
+    const eiHigh = eiLow + 1;
+    const t = emaF - eiLow;
+
+    if (currentPeriods) {
+      const emaPeriod = currentPeriods[eiLow] + t * (currentPeriods[eiHigh] - currentPeriods[eiLow]);
+      document.getElementById('contourPosVal').textContent = 'EMA ' + Math.round(emaPeriod);
+    }
+
+    const totalPts = numPoints + (projVerts ? projSteps + 1 : 0);
+    const lineVerts = new Float32Array(totalPts * 3);
+
+    for (let ti = 0; ti < numPoints; ti++) {
+      const iL = (eiLow * numPoints + ti) * 3, iH = (eiHigh * numPoints + ti) * 3;
+      lineVerts[ti*3]   = mainVerts[iL]   + t*(mainVerts[iH]   - mainVerts[iL]);
+      lineVerts[ti*3+1] = mainVerts[iL+1] + t*(mainVerts[iH+1] - mainVerts[iL+1]);
+      lineVerts[ti*3+2] = mainVerts[iL+2] + t*(mainVerts[iH+2] - mainVerts[iL+2]);
+    }
+
+    if (projVerts && projSteps > 0) {
+      const p = getParams();
+      const pSteps1 = projSteps + 1;
+      const projPrices = new Float64Array(pSteps1);
+      const projMinutes = p.projMinutes * (emaF / (numEMAs - 1));
+
+      for (let s = 0; s < pSteps1; s++) {
+        const pL = (eiLow*pSteps1+s)*3, pH = (eiHigh*pSteps1+s)*3;
+        const outIdx = (numPoints + s) * 3;
+        lineVerts[outIdx]   = projVerts[pL]   + t*(projVerts[pH]   - projVerts[pL]);
+        lineVerts[outIdx+1] = projVerts[pL+1] + t*(projVerts[pH+1] - projVerts[pL+1]);
+        lineVerts[outIdx+2] = projVerts[pL+2] + t*(projVerts[pH+2] - projVerts[pL+2]);
+
+        // Convert projected Y back to price for 2D chart
+        const scaledY = lineVerts[outIdx + 1];
+        const pParams = getParams();
+        projPrices[s] = ((scaledY + pParams.scaleY / 2) / pParams.scaleY) * priceRange + minPrice;
+      }
+
+      projectedContour = { prices: projPrices, minutes: projMinutes };
+    }
+
+    const lineGeom = new THREE.BufferGeometry();
+    lineGeom.setAttribute('position', new THREE.BufferAttribute(lineVerts, 3));
+    contourLineObj = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 2 }));
+    scene.add(contourLineObj);
+
+    drawChart();
+  }
+
+  // Tooltip (3D)
+  renderer.domElement.addEventListener('mousemove', (e) => {
+    if (!meshObj || !currentEMAs) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObject(meshObj);
+    if (hits.length > 0) {
+      const triIdx = Math.floor(hits[0].faceIndex / 2);
+      const emaIdx = Math.floor(triIdx / (numPoints - 1));
+      const timeIdx = triIdx % (numPoints - 1);
+      if (emaIdx < currentPeriods.length && timeIdx < numPoints) {
+        const date = new Date(timestamps[timeIdx]);
+        tooltip.style.display = 'block';
+        tooltip.style.left = (e.clientX - container3d.getBoundingClientRect().left + 14) + 'px';
+        tooltip.style.top = (e.clientY - container3d.getBoundingClientRect().top + 14) + 'px';
+        tooltip.innerHTML = `<div>${date.toLocaleString()}</div><div>Close: $${closes[timeIdx].toFixed(2)}</div><div>EMA ${currentPeriods[emaIdx]}: $${currentEMAs[emaIdx][timeIdx].toFixed(2)}</div>`;
+      }
+    } else { tooltip.style.display = 'none'; }
+  });
+
+  // Controls
+  document.querySelectorAll('#panel input[type=range]').forEach(el => el.addEventListener('input', updateLabels));
+
+  document.getElementById('opacity').addEventListener('input', () => {
+    const v = +document.getElementById('opacity').value / 100;
+    if (meshObj) meshObj.material.opacity = v;
+    if (projMeshObj) projMeshObj.material.opacity = v * 0.5;
+  });
+  document.getElementById('shininess').addEventListener('input', () => {
+    if (meshObj) meshObj.material.shininess = +document.getElementById('shininess').value;
+  });
+
+  document.getElementById('rebuild').addEventListener('click', buildMesh);
+  document.getElementById('colorMode').addEventListener('change', buildMesh);
+  document.getElementById('contourPos').addEventListener('input', updateContour);
+  document.getElementById('contourEnabled').addEventListener('change', updateContour);
+
+  function onResize() {
+    const w = container3d.clientWidth, h = container3d.clientHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+    resizeChart();
+    drawChart();
+  }
+  window.addEventListener('resize', onResize);
+
+  resizeChart();
+  updateLabels();
+  buildMesh();
+
+  (function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  })();
+}
+
+main();
+</script>
+</body>
+</html>
